@@ -1,35 +1,68 @@
-# RAG From Scratch
+# RAG From Scratch + Multi-Tool AI Agent
 
-A Retrieval Augmented Generation (RAG) pipeline built twice: first entirely
-by hand with no frameworks, then rebuilt using LangChain — to understand
-exactly what the framework abstracts before relying on it.
+Two projects built progressively — first a RAG pipeline built twice (manually
+then with LangChain), then a multi-tool AI agent that uses the RAG pipeline
+as one of its tools. Every piece built manually before using any framework,
+so every abstraction is understood from the inside.
 
-## What This Project Does
+---
 
-Takes a PDF (in this case, my AI course notes), splits it into chunks,
-converts those chunks into embeddings, stores them in a vector database,
-and answers questions about the document using only retrieved context —
-not the model's general training knowledge.
+## Project 1 — RAG Pipeline
 
-## Two Implementations
+A Retrieval Augmented Generation system that answers questions about a PDF
+using only retrieved context, not the model's general training knowledge.
 
-**`manual/`** — Built entirely from scratch using the Gemini SDK directly,
-ChromaDB, and pypdf. Every embedding call, the chunking function, and the
-retrieval logic are written by hand. No LangChain.
+### Two Implementations
 
-**`langchain/`** — The same pipeline rebuilt using LangChain, after the
-manual version was fully working and understood. Demonstrates what
-LangChain automates: document loading, splitting, embedding, vector
-storage, and chaining retrieval with generation.
+**`manual/`** — Built entirely from scratch using the Gemini SDK directly.
+Every embedding call, the chunking function, and the retrieval logic written
+by hand. No LangChain.
 
-## Pipeline (Both Versions)
+**`langchain/`** — The same pipeline rebuilt using LangChain after the manual
+version was fully working and understood. Demonstrates exactly what the
+framework abstracts: document loading, splitting, embedding, vector storage,
+and chaining retrieval with generation.
 
-1. Load PDF and extract text
-2. Split into overlapping chunks
+### RAG Pipeline (Both Versions)
+
+1. Load PDF and extract raw text
+2. Split into overlapping chunks manually
 3. Generate embeddings for each chunk (Gemini `gemini-embedding-001`)
-4. Store embeddings in ChromaDB
-5. Embed the user's question, retrieve the most similar chunks via cosine similarity
-6. Generate a grounded answer using only the retrieved context (Gemini `gemini-2.5-flash`)
+4. Store embeddings in ChromaDB (persistent across runs)
+5. Embed the user's question, retrieve most similar chunks via cosine similarity
+6. Generate a grounded answer using only retrieved context (Gemini `gemini-2.5-flash`)
+
+---
+
+## Project 2 — Multi-Tool AI Agent
+
+An AI agent built on top of the RAG pipeline that routes questions to the
+right tool automatically using Gemini's native function calling API.
+No agent frameworks — the decision loop is built manually.
+
+### Tools
+
+| Tool | Triggers when | Data source |
+|---|---|---|
+| `search_notes` | AI/ML concept questions | RAG pipeline over course notes |
+| `query_database` | Football statistics questions | 49,505 international matches (SQLite) |
+| Direct answer | Math and general knowledge | Model's own reasoning |
+
+### Agent Decision Loop
+
+1. User asks a question
+2. Model decides: call `search_notes`, call `query_database`, or answer directly
+3. If tool called: run the real function, feed result back to model
+4. Model generates final answer grounded in tool output
+
+### What the Agent Can Do
+
+- Generate complex SQL from schema description alone — no hardcoded queries
+- Route correctly between two tools based on question semantics
+- Handle out-of-scope questions gracefully without hallucinating
+- Maintain persistent vector storage so embeddings are computed once, not every run
+
+---
 
 ## Setup
 
@@ -44,26 +77,57 @@ storage, and chaining retrieval with generation.
    ```
    pip install -r requirements.txt
    ```
-4. Create a `.env` file in the root with your Gemini API key:
+4. Create a `.env` file in the root:
    ```
    GEMINI_API_KEY=your_key_here
    ```
-5. Place your own PDF in the root folder and update the filename inside the scripts
-6. Run either version:
+5. Add your own PDF to the root folder and update the filename in the scripts
+6. Download the football dataset from Kaggle
+   (`martj42/international-football-results-from-1872-to-2017`)
+   and place `results.csv` in the root, then run:
+   ```
+   python setup_database.py
+   ```
+7. Run either project:
    ```
    python manual/5_full_RAG.py
    python langchain/7_langchain_embedandstore.py
+   python langchain/9_agent_multi_tool.py
    ```
+
+---
 
 ## What I Learned
 
-- **Embeddings**: representing meaning as numbers, where similar ideas produce similar vectors
-- **Chunking strategy**: balancing chunk size and overlap to avoid losing context at boundaries, and how chunking method (single merged string vs per-page splitting) changes the number and quality of chunks
-- **Vector similarity search**: retrieving information by meaning, not keywords, using cosine similarity
-- **Prompt grounding**: instructing a model to answer only from given context to reduce hallucination
-- **What LangChain actually abstracts**: having built the manual version first, I could map every LangChain function (`PyPDFLoader`, `RecursiveCharacterTextSplitter`, `GoogleGenerativeAIEmbeddings`, `Chroma.from_documents`, `create_retrieval_chain`) back to the exact manual code it replaces
-- **Real-world engineering friction**: university account restrictions blocking API access, a model deprecation breaking a previously working script overnight, rate limits triggered by a framework sending requests faster than my manual code did, and a LangChain version change that moved `create_stuff_documents_chain` into a separate `langchain-classic` package
+**RAG fundamentals**
+- Embeddings: representing meaning as numbers where similar ideas produce similar vectors
+- Chunking tradeoffs: chunk size and overlap directly affect retrieval quality,
+  and splitting strategy (merged string vs per-page) changes chunk count significantly
+- Vector similarity search: retrieving by meaning not keywords using cosine similarity
+- Prompt grounding: instructing a model to answer only from context to reduce hallucination
+
+**LangChain internals**
+- Having built the manual version first, every LangChain abstraction maps directly
+  to the code it replaces — `PyPDFLoader`, `RecursiveCharacterTextSplitter`,
+  `GoogleGenerativeAIEmbeddings`, `Chroma.from_documents`, `create_retrieval_chain`
+
+**Agent design**
+- Gemini function calling: defining tool schemas, reading model decisions,
+  feeding results back in the correct 3-part conversation format
+- Tool descriptions control agent behavior — scope and routing emerge from
+  how you describe tools, not from hardcoded logic
+- System prompts override the model's tendency to answer from training knowledge
+  when you want it to always verify from a source
+
+**Real-world engineering friction**
+- University org account restrictions blocking Gemini API access
+- Model deprecation breaking a working script overnight (gemini-2.0-flash → 2.5-flash)
+- LangChain version change moving core chains into `langchain-classic`
+- Rate limits triggered by frameworks sending requests faster than manual code
+- Persistent ChromaDB eliminating 1-2 minute re-embedding on every run
+
+---
 
 ## Tech Stack
 
-Python, Google Gemini API, ChromaDB, pypdf, LangChain
+Python, Google Gemini API, ChromaDB, LangChain, SQLite, pypdf, pandas
