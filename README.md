@@ -131,3 +131,20 @@ No agent frameworks — the decision loop is built manually.
 ## Tech Stack
 
 Python, Google Gemini API, ChromaDB, LangChain, SQLite, pypdf, pandas
+
+## Evaluation
+
+Tested the agent on 8 questions covering all three routing paths.
+
+| Question | Expected Tool | Actual Tool | Correct |
+|---|---|---|---|
+| What is backtracking search? | search_notes | search_notes | ✅ |
+| What is a zero-sum game? | search_notes | search_notes | ✅ |
+| What is arc consistency? | search_notes | search_notes | ✅ |
+| How many FIFA World Cup matches in database? | query_database | query_database | ✅ |
+| Which team played most FIFA World Cup matches? | query_database | query_database | ✅ |
+| How many matches did Brazil play in World Cup? | query_database | query_database | ✅ |
+| What is 17 times 13? | direct | direct | ✅ |
+| What is the capital of France? | direct | direct | ✅ |
+
+**Tool routing accuracy: 8/8 (100%)**
